@@ -1,0 +1,7 @@
+PySide6
+pytesseract
+Pillow
+anthropic
+TTS
+sounddevice
+soundfile
