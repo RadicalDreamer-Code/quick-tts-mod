@@ -3,9 +3,10 @@
 Drag an image containing text onto the window; it gets OCR'd and read aloud
 via [Coqui TTS](https://github.com/coqui-ai/tts).
 
-- OCR defaults to local, offline Tesseract. A "Re-OCR with Claude" button
-  re-reads the image via Claude vision for cases Tesseract struggles with
-  (skewed photos, handwriting, stylized fonts).
+- OCR runs via a local [GLM-OCR](https://ollama.com/library/glm-ocr) model
+  served through [Ollama](https://ollama.com) — no cloud calls, no API key.
+  A "Re-run OCR" button re-reads the same image if the first pass came out
+  wrong.
 - Text is shown in an editable box before speaking, so OCR mistakes can be
   fixed by hand.
 
@@ -19,16 +20,11 @@ uv venv --python 3.11 .venv
 uv pip install -p .venv -r requirements.txt
 ```
 
-System dependencies (Arch/CachyOS):
+Make sure [Ollama](https://ollama.com) is running and the OCR model is
+pulled:
 
 ```bash
-sudo pacman -S tesseract tesseract-data-eng
-```
-
-For the Claude vision re-OCR button, set an API key:
-
-```bash
-export ANTHROPIC_API_KEY=your-key-here
+ollama pull glm-ocr
 ```
 
 ## Run

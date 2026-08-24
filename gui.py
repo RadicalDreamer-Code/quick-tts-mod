@@ -16,8 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import ocr_claude
-import ocr_local
+import ocr_ollama
 import tts_engine
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tiff", ".gif"}
@@ -28,6 +27,7 @@ class Worker(QThread):
 
     succeeded = Signal(object)
     failed = Signal(str)
+    interrupted = Signal()
 
     def __init__(self, fn, *args, **kwargs):
         super().__init__()
@@ -38,6 +38,8 @@ class Worker(QThread):
     def run(self):
         try:
             result = self._fn(*self._args, **self._kwargs)
+        except tts_engine.Interrupted:
+            self.interrupted.emit()
         except Exception as exc:  # noqa: BLE001 - surfaced to the user via the signal
             self.failed.emit(str(exc))
         else:
@@ -92,9 +94,13 @@ class MainWindow(QMainWindow):
         self.text_edit = QTextEdit()
         self.text_edit.setPlaceholderText("Extracted text will appear here — feel free to edit it before speaking.")
 
-        self.reocr_button = QPushButton("Re-OCR with Claude")
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.setEnabled(False)
+        self.stop_button.clicked.connect(self.on_stop)
+
+        self.reocr_button = QPushButton("Re-run OCR")
         self.reocr_button.setEnabled(False)
-        self.reocr_button.clicked.connect(self.on_reocr_claude)
+        self.reocr_button.clicked.connect(self.on_reocr_ollama)
 
         self.speak_button = QPushButton("Speak")
         self.speak_button.clicked.connect(self.on_speak)
@@ -102,12 +108,16 @@ class MainWindow(QMainWindow):
         self.save_button = QPushButton("Save audio…")
         self.save_button.clicked.connect(self.on_save_audio)
 
-        if not ocr_claude.available():
+        if not ocr_ollama.available():
+            self.drop_area.setText(
+                f"GLM-OCR model not found.\nRun: ollama pull {ocr_ollama.MODEL}"
+            )
             self.reocr_button.setToolTip(
-                "Set the ANTHROPIC_API_KEY environment variable to enable this."
+                f"Pull the model first: ollama pull {ocr_ollama.MODEL}"
             )
 
         button_row = QHBoxLayout()
+        button_row.addWidget(self.stop_button)
         button_row.addWidget(self.reocr_button)
         button_row.addWidget(self.speak_button)
         button_row.addWidget(self.save_button)
@@ -132,26 +142,35 @@ class MainWindow(QMainWindow):
     def _set_busy(self, busy: bool, message: str = ""):
         for widget in (self.reocr_button, self.speak_button, self.save_button):
             widget.setEnabled(not busy and self._widget_should_be_enabled(widget))
+        self.stop_button.setEnabled(busy)
         if message:
             self.statusBar().showMessage(message)
 
     def _widget_should_be_enabled(self, widget) -> bool:
         if widget is self.reocr_button:
-            return ocr_claude.available() and self.current_image_path is not None
+            return ocr_ollama.available() and self.current_image_path is not None
         return True
 
     def on_image_dropped(self, path: str):
+        if not ocr_ollama.available():
+            QMessageBox.warning(
+                self,
+                "GLM-OCR not available",
+                f"Couldn't reach the '{ocr_ollama.MODEL}' model in Ollama.\n\n"
+                f"Make sure Ollama is running and run: ollama pull {ocr_ollama.MODEL}",
+            )
+            return
         self.current_image_path = path
         self.drop_area.show_image(path)
-        self.reocr_button.setEnabled(ocr_claude.available())
-        self._set_busy(True, "Reading text locally…")
-        self._run_async(ocr_local.extract_text, self.on_ocr_done, path)
+        self.reocr_button.setEnabled(True)
+        self._set_busy(True, "Asking GLM-OCR to read the image…")
+        self._run_async(ocr_ollama.extract_text, self.on_ocr_done, path)
 
-    def on_reocr_claude(self):
+    def on_reocr_ollama(self):
         if not self.current_image_path:
             return
-        self._set_busy(True, "Asking Claude to read the image…")
-        self._run_async(ocr_claude.extract_text, self.on_ocr_done, self.current_image_path)
+        self._set_busy(True, "Asking GLM-OCR to read the image…")
+        self._run_async(ocr_ollama.extract_text, self.on_ocr_done, self.current_image_path)
 
     def on_ocr_done(self, text: str):
         self.text_edit.setPlainText(text)
@@ -182,3 +201,15 @@ class MainWindow(QMainWindow):
     def on_error(self, message: str):
         self._set_busy(False, "Error")
         QMessageBox.critical(self, "Error", message)
+
+    def on_stop(self):
+        """Interrupt whatever's running (OCR call or speech synthesis/playback)
+        and reset the UI so a new action can start right away."""
+        tts_engine.interrupt()
+        if self._worker is not None:
+            for signal in (self._worker.succeeded, self._worker.failed, self._worker.interrupted):
+                try:
+                    signal.disconnect()
+                except (RuntimeError, TypeError):
+                    pass
+        self._set_busy(False, "Stopped")
