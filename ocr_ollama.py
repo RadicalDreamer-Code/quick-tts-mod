@@ -70,8 +70,19 @@ def _clean(text: str) -> str:
     return "\n".join(deduped).strip()
 
 
+def _tail_is_repeat(text: str, tail_len: int = 24) -> bool:
+    """True once the end of the (in-progress) output duplicates something it
+    already produced earlier — the generation-time signature of this model's
+    repetition loops, whether or not a markdown fence is involved."""
+    normalized = re.sub(r"\s+", " ", text.translate(_QUOTE_MAP).casefold()).strip()
+    if len(normalized) < tail_len * 2:
+        return False
+    tail = normalized[-tail_len:]
+    return tail in normalized[: -tail_len]
+
+
 def extract_text(image_path: str) -> str:
-    response = ollama.chat(
+    stream = ollama.chat(
         model=MODEL,
         messages=[
             {
@@ -80,6 +91,14 @@ def extract_text(image_path: str) -> str:
                 "images": [image_path],
             }
         ],
-        options={"repeat_penalty": 1.3, "num_predict": 2048},
+        options={"repeat_penalty": 1.3, "num_predict": 2048, "stop": ["```"]},
+        stream=True,
     )
-    return _clean(response["message"]["content"])
+
+    accumulated = ""
+    for chunk in stream:
+        accumulated += chunk["message"]["content"]
+        if _tail_is_repeat(accumulated):
+            break
+
+    return _clean(accumulated)

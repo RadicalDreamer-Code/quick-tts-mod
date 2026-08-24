@@ -9,6 +9,9 @@ via [Coqui TTS](https://github.com/coqui-ai/tts).
   wrong.
 - Text is shown in an editable box before speaking, so OCR mistakes can be
   fixed by hand.
+- TTS uses the VITS model and runs on GPU if a CUDA device is available
+  (falls back to CPU automatically otherwise — just slower).
+- A "Stop" button interrupts an in-progress OCR/synthesis call or playback.
 
 ## Setup
 

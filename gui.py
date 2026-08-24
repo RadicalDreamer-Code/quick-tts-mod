@@ -207,7 +207,7 @@ class MainWindow(QMainWindow):
         and reset the UI so a new action can start right away."""
         tts_engine.interrupt()
         if self._worker is not None:
-            for signal in (self._worker.succeeded, self._worker.failed, self._worker.interrupted):
+            for signal in (self._worker.succeeded, self._worker.failed):
                 try:
                     signal.disconnect()
                 except (RuntimeError, TypeError):
