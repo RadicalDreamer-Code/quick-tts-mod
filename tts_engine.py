@@ -1,6 +1,6 @@
-"""Text-to-speech via Coqui TTS.
+"""Text-to-speech via Coqui TTS (GPU-accelerated VITS).
 
-Synthesis runs in a persistent worker subprocess: Tacotron2/HiFi-GAN can
+Synthesis runs in a persistent worker subprocess: the underlying model can
 segfault or abort natively on certain malformed input (very short or
 punctuation-only fragments), and a crash there must not take the whole GUI
 process down with it. If the worker dies, it's respawned on the next call.
@@ -11,7 +11,7 @@ import re
 
 import sounddevice as sd
 
-MODEL_NAME = "tts_models/en/ljspeech/tacotron2-DDC"
+MODEL_NAME = "tts_models/en/ljspeech/vits"
 
 # Lines that are only punctuation/underscores can't be synthesized (the
 # vocoder's conv layers need a minimum-length input) and aren't real text
@@ -34,9 +34,11 @@ def sanitize(text: str) -> str:
 
 
 def _worker_main(conn):
+    import torch
     from TTS.api import TTS
 
-    tts = TTS(model_name=MODEL_NAME, progress_bar=False, gpu=False)
+    tts = TTS(model_name=MODEL_NAME, progress_bar=False)
+    tts.to("cuda" if torch.cuda.is_available() else "cpu")
     while True:
         try:
             message = conn.recv()
