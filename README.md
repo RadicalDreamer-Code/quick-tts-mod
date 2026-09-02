@@ -1,7 +1,12 @@
 # quick-tts-mod
 
-Drag an image containing text onto the window; it gets OCR'd and read aloud.
+Drag an image containing text onto the window — or paste one with Ctrl+V —
+and it gets OCR'd and read aloud.
 
+- Images can come from the clipboard as well as the file system: Ctrl+V (or
+  the "Paste image" button) takes either raw image data, e.g. a screenshot,
+  or an image file copied in a file manager. Ctrl+V still pastes text as
+  usual while the text box has focus and the clipboard holds no image.
 - OCR runs via a local [GLM-OCR](https://ollama.com/library/glm-ocr) model
   served through [Ollama](https://ollama.com) — no cloud calls, no API key.
   A "Re-run OCR" button re-reads the same image if the first pass came out
