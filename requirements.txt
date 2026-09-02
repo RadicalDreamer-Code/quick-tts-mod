@@ -2,3 +2,6 @@ PySide6
 ollama
 TTS
 sounddevice
+soundfile
+elevenlabs
+python-dotenv

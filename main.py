@@ -1,8 +1,12 @@
 import sys
 
-from PySide6.QtWidgets import QApplication
+from dotenv import load_dotenv
 
-from gui import MainWindow
+load_dotenv()
+
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from gui import MainWindow  # noqa: E402
 
 
 def main():

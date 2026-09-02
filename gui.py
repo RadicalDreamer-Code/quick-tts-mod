@@ -5,6 +5,7 @@ import os
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QPixmap
 from PySide6.QtWidgets import (
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -108,6 +109,12 @@ class MainWindow(QMainWindow):
         self.save_button = QPushButton("Save audio…")
         self.save_button.clicked.connect(self.on_save_audio)
 
+        self.backend_combo = QComboBox()
+        for name, label in tts_engine.BACKEND_LABELS.items():
+            self.backend_combo.addItem(label, userData=name)
+        self.backend_combo.setCurrentIndex(self.backend_combo.findData(tts_engine.current_backend()))
+        self.backend_combo.currentIndexChanged.connect(self.on_backend_changed)
+
         if not ocr_ollama.available():
             self.drop_area.setText(
                 f"GLM-OCR model not found.\nRun: ollama pull {ocr_ollama.MODEL}"
@@ -115,6 +122,11 @@ class MainWindow(QMainWindow):
             self.reocr_button.setToolTip(
                 f"Pull the model first: ollama pull {ocr_ollama.MODEL}"
             )
+
+        voice_row = QHBoxLayout()
+        voice_row.addWidget(QLabel("Voice:"))
+        voice_row.addWidget(self.backend_combo)
+        voice_row.addStretch()
 
         button_row = QHBoxLayout()
         button_row.addWidget(self.stop_button)
@@ -125,6 +137,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
         layout.addWidget(self.drop_area)
         layout.addWidget(self.text_edit)
+        layout.addLayout(voice_row)
         layout.addLayout(button_row)
 
         container = QWidget()
@@ -143,6 +156,7 @@ class MainWindow(QMainWindow):
         for widget in (self.reocr_button, self.speak_button, self.save_button):
             widget.setEnabled(not busy and self._widget_should_be_enabled(widget))
         self.stop_button.setEnabled(busy)
+        self.backend_combo.setEnabled(not busy)
         if message:
             self.statusBar().showMessage(message)
 
@@ -201,6 +215,26 @@ class MainWindow(QMainWindow):
     def on_error(self, message: str):
         self._set_busy(False, "Error")
         QMessageBox.critical(self, "Error", message)
+
+    def on_backend_changed(self, index: int):
+        name = self.backend_combo.itemData(index)
+        if not tts_engine.available(name):
+            QMessageBox.warning(
+                self,
+                "Voice engine not available",
+                f"{tts_engine.BACKEND_LABELS[name]} isn't available right now.\n\n"
+                + (
+                    "Set ELEVENLABS_API_KEY (e.g. in .env) to enable this."
+                    if name == "elevenlabs"
+                    else ""
+                ),
+            )
+            self.backend_combo.blockSignals(True)
+            self.backend_combo.setCurrentIndex(self.backend_combo.findData(tts_engine.current_backend()))
+            self.backend_combo.blockSignals(False)
+            return
+        tts_engine.set_backend(name)
+        self.statusBar().showMessage(f"Voice engine: {tts_engine.BACKEND_LABELS[name]}")
 
     def on_stop(self):
         """Interrupt whatever's running (OCR call or speech synthesis/playback)
